@@ -12,3 +12,11 @@ Do mothers who smoke tend to give birth to babies with lower weights than mother
 What is a likely range for the difference in birth weights for smokers and non-smokers?
 Is there any evidence that the association between smoking and birth weight differs by mother’s race? If so, characterize those differences.
 Are there other interesting associations with birth weight that are worth mentioning?
+
+MATERNAL SMOKING AND PRE-TERM BIRTH. This question is a continuation of the question on maternal smoking and birth weigths from the last assignment. Remember that the data file contained an indicator variable called Premature (gestational age < 270 days), which is just a recoding of gestational age. For this assignment, use that as your outcome/response variable.
+
+Our questions of interest are very similar to the last assignment as well, except using the new response variable. The questions are as follows:
+
+Do mothers who smoke tend to have higher chances of pre-term birth than mothers who do not smoke? What is a likely range for the odds ratio of pre-term birth for smokers and non-smokers?
+Is there any evidence that the odds ratio of pre-term birth for smokers and non-smokers differs by mother’s race? If so, characterize those differences.
+Are there other interesting associations with the odds of pre-term birth that are worth mentioning?
