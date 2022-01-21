@@ -1,0 +1,447 @@
+
+---
+title: "Data Analysis Assignment 2"
+author: "Surabhi Trivedi"
+date: "9th Sept 2021"
+output:
+  pdf_document: default
+---
+
+* * *
+```{r setup, include=FALSE}
+# DO NOT ALTER CODE IN THIS CHUNK
+# The very first time you use this R markdown file, you should install each of the packages below.
+# The same goes for other packages you might decide to use
+# Remember that you only need to install each R package once in R (ever -- unless you change computers).
+# All you need to do whenever you need to use the package again (after restarting the R session),
+# is to use the library function to call the package.
+# For example, type install.packages("knitr") in the console to install the knitr package. 
+knitr::opts_chunk$set(echo = TRUE, fig.width=5, fig.height=4, fig.align = 'center')
+library(knitr)
+library(ggplot2)
+#library(kableExtra)
+#library(lattice)
+library(dplyr)
+library(rms) #for VIF
+library(MASS)
+library(jtools)
+```
+
+# **Maternal Smoking and Birth Weights**
+
+### Summary
+This report investigates if mothers who smoke tend to give birth to babies with lower weights than mothers who do not smoke. To infer this I have used multiple linear regression. The data used contains multiple variables about the mother such as height, level of education, mother's ethnicity etc. The final model reports the variable *smoke* (binary variable indicating whether the mother smokes or not) as a statistically significant variable. The average weight of babies born by mother's who smoke is **9.27 ounces** less than babies whose mother's do not smoke, keeping all the other variables constant (this result is statistically significant at a significance level of 0.05).
+
+### Introduction
+In this report I am primarily interested in establishing if smoking mothers give birth to babies with lower body weights. The secondary goal of this report would be to quantify the effect of smoking on a baby's weight --- what is the difference in weight of babies whose mothers smoke vs babies whose mothers do not. Additionally, I am also interested in reporting if the effect of smoking on a baby's weight is disproportionately increases or decreases based on the mother's race/ ethnicity. Furthermore, I also report findings that I found interesting but were not directly related to the mother's smoking status. 
+
+### Data
+The dataset of interest contains data for 869 male single births where the baby lived up to atleast 28 days. The response variable *bwt.oz* is a continuous variable indicating the new born baby's weight in ounces. There are 9 predictor variables in the dataset of which 4 are categorical and 5 are continuous/ discreet. This dataset contains no missing value.
+
+The original dataset encoded all variables as either num or int. I converted 4 of these variables to factor variables in order to make the analysis more meaningful and for the ease of interpretation. These variables were *mrace, med, inc, smoke*. I would also like to mention that for mrace, levels 0-5 were collapsed to one level: 0. Similarly, for med, levels 6-7 were collapsed to level: 6. 
+
+Initial EDA of the data revealed that the data collected is imbalanced with respect to race. Of the 869 mothers present in the dataset, 626 were white and 169 were black (as can be seen in the plot below). The other ethnicities are underrepresented in the dataset -- this may make it harder for us to measure and interpret interaction between the variables *smoke* and *mrace*. All the other variables are well balanced in their distribution. Further, the response variable *bwt.oz* is reasonably normal in it's distribution.
+
+
+
+```{r echo=FALSE}
+#Loading Data
+smoking <- read.csv("smoking.csv")
+babies <- read.csv("babiesdata.csv")
+#summary(smoking)
+#str(smoking)
+
+#subsetting the data and removing unwanted vars
+smoking <- smoking[c(-2,-3)]
+#summary(smoking)
+#describe(smoking)
+
+#Collapsing race and education categories for easier analysis
+smoking$med[smoking$med == 7] <- 6
+smoking$mrace[smoking$mrace == 1 | smoking$mrace == 2 | smoking$mrace == 3 | smoking$mrace == 4 | smoking$mrace == 5] <- 0
+
+#converting vars from num to factor
+smoking[,'mrace']<-factor(smoking[,'mrace'])
+smoking[,'med']<-factor(smoking[,'med'])
+smoking[,'inc']<-factor(smoking[,'inc'])
+smoking[,'smoke']<-factor(smoking[,'smoke'])
+
+counts <- table(smoking$smoke, smoking$mrace)
+barplot(counts, main="Distribution of Mothers' Race by Smoking Status",
+        xlab="Race", col=c("lightblue","yellow"),
+        legend = rownames(counts))
+```
+
+
+
+On assessing the linearity between the predictors and the reponse variable I noticed that a lot of discreet variables were behaving like categorical variables which made it harder for me to assess their relationship with the response variable. To solve for this, I took the average of bwt.oz for each level and the plotted this average with the predictor. This made it considerably easy for me to visually understand the relationship between the predictors and the response variable. On visually analysing the categorical predictors *mrace* and *smoke* I could see a significant difference in the median for bwt.oz for both these predictors indicating that these two variables might be good predictors of our response variable. Below is a comparative boxplot for *mrace*. Black and Asian mothers have given birth to babies with lower weights.
+
+
+
+```{r echo=FALSE}
+ggplot(smoking,aes(x=mrace, y=bwt.oz, fill=mrace)) +
+  geom_boxplot() + #coord_flip() +
+  scale_fill_brewer(palette="Reds") +
+  labs(title="Weight vs Mother's Race",x="Mother's Race",y="Weight") + 
+  theme_classic() + theme(legend.position="none")
+```
+
+
+
+I explored variable interactions only with *smoke* as that is the variable I am interested in inferring and the number of combinations possible is really large. On visually exploring interactions with *smoke*, I did not find any variable interaction worth including in my model. However, while model building I consider all interactions possible with stepwise linear regression and do an F-test to understand if any of the interactions were significant.
+
+### Model 
+I started with a very basic model with all the predictors. Model assumptions were reasonably satisfied for this model. No outliers, leverage points or influential points were detected. Mother's height, weight pre pregnancy, smoking status and some levels of *mrace* were significant. The second step was to include the interaction between *smoke* and *race* as we are interested in inferring how the relationship between *bwt.oz* and *smoke* changes based on the mother's race. The F-test between my initial model and this model was not significant. Following this, I'd like to make the inference that there is no statistically significant interactions between the variables *race* and *smoke*. However, I would like to point out that the dataset is not representative of all races and this inference may change if we could collect more data for asian, mexican, and mixed race mothers.
+
+Next, I checked for multicollinearity between variables and the VIF for *med* were > 30. Based on this insight, I proceeded to check for variable interactions between *med* and the other variables. Intuitively I checked for interaction between *med* and *inc* as logically these two variables can be correlated. The F-test for this interaction was significant as can be seen below:
+
+
+```{r echo=FALSE}
+Model1 <- lm(bwt.oz~parity+mrace+mage+med+mht+mpregwt+inc+smoke,data=smoking)
+Model1_inter2 <- lm(bwt.oz~parity+mage+med*inc+mht+mpregwt+smoke+mrace,data=smoking)
+
+#F-test to understand if our interaction is significant
+table1 <- knitr::kable(anova(Model1,Model1_inter2), "simple")
+table1
+```
+
+
+```{r echo=FALSE}
+#plot for interaction between income and education
+ggplot(smoking,aes(x=med, y=bwt.oz, fill=med)) +
+  geom_boxplot() + #coord_flip() +
+  scale_fill_brewer(palette="Set1") +
+  labs(title="Weight vs Mother's Educ by Income",x="Mother's Educ",y="Weight") + 
+  theme_classic() + theme(legend.position="none") +
+  facet_wrap( ~ inc,ncol=4)
+```
+
+However, I find it very hard to conclude anything meaningful from this interaction. I tried plotting box plots for Weight with Mother's Education with Income. But I do not see any trend that can interpreted in the context of this data. Since the income being referred to is the family income, it might help to have more data about the baby's family -- for example the father's data might help us in interpreting this interaction better. There is also a possibility that there is another confounding variable which is effecting both *med* and *inc* in whose absence it might be harder to draw conclusions regarding this interaction.
+
+For model selection, I used stepwise linear model regression with BIC as we're interested in inferring the *smoke* variable and our goal is not to predict *bwt.oz*. Below are the results from the step-wise regression, which I also chose as my final model for the following reasons:
+1. The regression output does not include *med* or *inc* and I am happy with that as *med* had a very high variance inflation factor and the interaction for *med* and *inc* was also significant. Were we interested in the inference of *med* or *inc* I would have kept these variables. However since that is not the case, I proceeded with this model.
+2. My variable of interest is statistically significant in this model
+3. This nodel satisfies all the model assumptions reasonably well
+4. The asjusted R squared for the model is not very high but since prediction is not our goal we can ignore this statistic
+
+Below is the linear regression equation and summary of my final model:
+
+
+$$BirthWeight_i = \beta_0 + \beta_1 smoke_{i} + \beta_2 mrace_{i} + \beta_3 mpregwt_{i} + \beta_4 mht_{i} + \epsilon_i; \ \ \epsilon_i \overset{iid}{\sim} N(0, \sigma^2).$$
+
+```{r echo=FALSE}
+final_model <- lm(bwt.oz~smoke + mrace + mpregwt + mht, data = smoking)
+summ(final_model)
+```
+
+
+From my final model I can infer that mother's who smoke tend to give birth to babies with lower weights. My results are statistically significant at 0.05. Mothers who do not smoke give birth to babies who are 9.27 ounces heavier in comparison to mother's who smoke. The likely range for difference in birth weights for mothers who smoke vs who do not is **(7 ounces, 11.54 ounces)** i.e. for mothers of same height, pre pregnancy weight, same race, we expect mother's who smoke to give birth to babies which will on average weight 9.27 ounces less than mother's who do not smoke, with 95% confidence in ounces = **(7 ounces, 11.54 ounces)**.
+
+I also find it very interesting to see that mothers of black and asian ethnicities give birth to babies of relatively lower weights (~8 ounces) as opposed to white mothers. Again these results are statistically significant. Mother's height and pre pregnancy weight are also significant and have a positive slope with respect to *bwt.oz*. 
+
+### Conclusion
+In conclusion, I would like to say that women who are pregnant should refrain from smoking as it might affect the health of their child. 
+
+The final model and the analyses reported above do suffer from some drawbacks however. Firstly, the variable *mrace* is not well represented which put's in question the significance of this variable in our model. Secondly, *med* has a very high VIF and would be a very major problem if we're interested in predicting *bwt.oz*. Thirdly, I feel the most major drawback of this model is that it does not take into account the health statistics of the father at all. The linear relationship between smoke and weight that we're seeing above could very well be correlated with the health of the father. 
+
+***
+
+## *R Code Appendix*
+
+```{r}
+###########################################################################
+###########################################################################
+################## Maternal Smoking and Birth Weights #####################
+###########################################################################
+###########################################################################
+
+###### Clear environment and load libraries
+rm(list = ls())
+library(knitr)
+library(ggplot2)
+#library(kableExtra)
+#library(lattice)
+library(dplyr)
+library(rms) #for VIF
+library(MASS)
+library(jtools)
+
+
+#Loading Data
+smoking <- read.csv("smoking.csv")
+babies <- read.csv("babiesdata.csv")
+summary(smoking)
+str(smoking)
+
+#subsetting the data and removing unwanted vars
+smoking <- smoking[c(-2,-3)]
+summary(smoking)
+describe(smoking)
+
+#Collapsing race and education categories for easier analysis
+smoking$med[smoking$med == 7] <- 6
+smoking$mrace[smoking$mrace == 1 | smoking$mrace == 2 | smoking$mrace == 3 | smoking$mrace == 4 | smoking$mrace == 5] <- 0
+
+#converting vars from num to factor
+smoking[,'mrace']<-factor(smoking[,'mrace'])
+smoking[,'med']<-factor(smoking[,'med'])
+smoking[,'inc']<-factor(smoking[,'inc'])
+smoking[,'smoke']<-factor(smoking[,'smoke'])
+
+####### EDA
+#Checking if the distribution of the response variable is normal
+hist(smoking$bwt.oz,xlab="Baby Weight (Ounces)",main="Distribution of Weight of Babies",col=rainbow(10))
+
+#Exploring the relationship b/w weight and predictors
+#mage
+ggplot(smoking,aes(x=mage, y=bwt.oz)) +
+  geom_point(alpha = .5,colour="blue4") +
+  geom_smooth(method="lm",col="red3") + theme_classic() +
+  labs(title="Weight vs Mother's Age",x="Mother's Age",y="Weight")
+#not linear - maybe we can try converting mage to categorical 
+#you can do the median thing
+
+#mpregwt
+ggplot(smoking,aes(x=mpregwt, y=bwt.oz)) +
+  geom_point(alpha = .5,colour="blue4") +
+  geom_smooth(method="lm", col="red3") + theme_classic() +
+  labs(title="Weight vs Mother's Weight",x="Mother's Weight",y="Weight")
+#somehwat weakly linear
+#you can do the median thing
+
+#parity
+ggplot(smoking,aes(x=parity, y=bwt.oz)) +
+  geom_point(alpha = .5,colour="blue4") +
+  geom_smooth(method="lm", col="red3") + theme_classic() +
+  labs(title="Weight vs Parity",x="Parity",y="Weight")
+#not linear
+
+#mht
+ggplot(smoking,aes(x=mht, y=bwt.oz)) +
+  geom_point(alpha = .5,colour="blue4") +
+  geom_smooth(method="lm", col="red3") + theme_classic() +
+  labs(title="Weight vs Mother's Height",x="Mother's Height",y="Weight")
+#not linear
+#you can do the median thing
+
+#inc
+ggplot(smoking,aes(x=inc, y=bwt.oz, fill=inc)) +
+  geom_boxplot() + #coord_flip() +
+  scale_fill_brewer(palette="Blues") +
+  labs(title="Weight vs Family Income",x="Family Income",y="Weight") + 
+  theme_classic() + theme(legend.position="none")
+#median is somewhat similar
+
+#mrace
+ggplot(smoking,aes(x=mrace, y=bwt.oz, fill=mrace)) +
+  geom_boxplot() + #coord_flip() +
+  scale_fill_brewer(palette="Red") +
+  labs(title="Weight vs Mother's Race",x="Mother's Race",y="Weight") + 
+  theme_classic() + theme(legend.position="none")
+#median is different
+
+#med
+ggplot(smoking,aes(x=med, y=bwt.oz, fill=med)) +
+  geom_boxplot() + #coord_flip() +
+  scale_fill_brewer(palette="Blues") +
+  labs(title="Weight vs Mother's Educ",x="Mother's Educ",y="Weight") + 
+  theme_classic() + theme(legend.position="none")
+#median is similar
+
+#smoke
+ggplot(smoking,aes(x=smoke, y=bwt.oz, fill=smoke)) +
+  geom_boxplot() + #coord_flip() +
+  scale_fill_brewer(palette="Blues") +
+  labs(title="Weight vs Smoke",x="Smoke",y="Weight") + 
+  theme_classic() + theme(legend.position="none")
+#median is different
+
+####### Let's explore interactions
+#Weight with mage by smoke
+ggplot(smoking,aes(x=mage, y=bwt.oz)) +
+  geom_point(alpha = .5,colour="blue4") +
+  geom_smooth(method="lm",col="red3") + theme_classic() +
+  labs(title="Weight vs Mother's Age by Smoke",x="Mother's Age",y="Weight") +
+  facet_wrap( ~ smoke,ncol=4)
+#no interaction
+
+#Weight with parity by smoke
+ggplot(smoking,aes(x=parity, y=bwt.oz)) +
+  geom_point(alpha = .5,colour="blue4") +
+  geom_smooth(method="lm",col="red3") + theme_classic() +
+  labs(title="Weight vs Parity by Smoke",x="Parity",y="Weight") +
+  facet_wrap( ~ smoke,ncol=4)
+#no interaction
+
+#Weight with mht by smoke
+ggplot(smoking,aes(x=mht, y=bwt.oz)) +
+  geom_point(alpha = .5,colour="blue4") +
+  geom_smooth(method="lm",col="red3") + theme_classic() +
+  labs(title="Weight vs Mother's Height by Smoke",x="Mother's Height",y="Weight") +
+  facet_wrap( ~ smoke,ncol=4)
+#no interaction
+
+#Weight with mpregwt by smoke
+ggplot(smoking,aes(x=mpregwt, y=bwt.oz)) +
+  geom_point(alpha = .5,colour="blue4") +
+  geom_smooth(method="lm",col="red3") + theme_classic() +
+  labs(title="Weight vs Mother's Weight by Smoke",x="Mother's Weight",y="Weight") +
+  facet_wrap( ~ smoke,ncol=4)
+#no interaction
+
+####### Now interaction b/w categorical variables
+#Weight with mrace by smoke
+ggplot(smoking,aes(x=mrace, y=bwt.oz, fill=mrace)) +
+  geom_boxplot() + #coord_flip() +
+  scale_fill_brewer(palette="Blues") +
+  labs(title="Weight vs Race by Smoke",x="Race",y="Weight") + 
+  theme_classic() + theme(legend.position="none") +
+  facet_wrap( ~ smoke,ncol=4)
+#there might be some interaction 
+
+#Weight with med by smoke
+ggplot(smoking,aes(x=med, y=bwt.oz, fill=med)) +
+  geom_boxplot() + #coord_flip() +
+  scale_fill_brewer(palette="Blues") +
+  labs(title="Weight vs Mother's Educ by Smoke",x="Mother's Educ",y="Weight") + 
+  theme_classic() + theme(legend.position="none") +
+  facet_wrap( ~ smoke,ncol=4)
+#trend is mostly the same with some differences
+
+#Weight with inc by smoke
+ggplot(smoking,aes(x=inc, y=bwt.oz, fill=inc)) +
+  geom_boxplot() + #coord_flip() +
+  scale_fill_brewer(palette="Blues") +
+  labs(title="Weight vs Family's Income by Smoke",x="Family's Income",y="Weight") + 
+  theme_classic() + theme(legend.position="none") +
+  facet_wrap( ~ smoke,ncol=4)
+#trend is mostly the same with some differences
+
+#TAKEAWAYS:
+#We see no evidence of non-normality
+#We also notice that linearity is a problem with all the continuous vars as they behave like categorical vars
+#We see that the median for race and smoke is different suggesting they might be significant variables
+#We might also consider interactions between `Race` and `Smoke`
+
+###### Modeling and Model Assessment
+#Based on our EDA we will include all the variables and the interaction b/w mrace and smoke
+
+#First, a MLR model on weight with only main effects
+Model1 <- lm(bwt.oz~parity+mrace+mage+med+mht+mpregwt+inc+smoke,data=smoking)
+summary(Model1)
+
+#Let's do some model assessment with this before adding the interaction term
+#Linearity 
+ggplot(smoking,aes(x=mpregwt, y=Model1$residual)) +
+  geom_point(alpha = .7) +  geom_hline(yintercept=0,col="red3") + theme_classic() 
+#Linearity is clearly not being satisfied for parity, mage, mht because they're behaving like categorical variables
+#mpregwt is somewhat satisfying the linearity assumption
+
+#Normality
+plot(Model1,which=2,col=c("blue4"))
+#normality is being reasonably satisfied aligned with what we saw during EDA
+
+#variance and independence
+plot(Model1,which=1,col=c("blue4"))
+#both assumptions are being reasonably satisfied
+
+#cooks distance, leverage, standardized residuals
+plot(Model1,which=5,col=c("blue4"))
+#no outliers, leverage or influential points
+
+#Lets fit the model to all the vars + interaction b/w smoke and race
+Model1_inter1 <- lm(bwt.oz~parity+mage+med+mht+mpregwt+inc+smoke*mrace,data=smoking)
+summary(Model1_inter1)
+
+#F-test to understand if our interaction is significant
+anova(Model1,Model1_inter1)
+#interaction is not significant
+
+#check multicollinearity with vif
+vif(Model1)
+#med has very high vif which is problematic
+
+#Let's remove med and see if it improves our model
+Model2 <- lm(bwt.oz~parity+mrace+mage+mht+mpregwt+inc+smoke,data=smoking)
+summary(Model2)
+#doesn't improve the model
+
+#Let's check for multicollinearity between med and inc as they intuitively seem to be correlated
+Model1_inter2 <- lm(bwt.oz~parity+mage+med*inc+mht+mpregwt+smoke+mrace,data=smoking)
+summary(Model1_inter2)
+
+#F-test to understand if our interaction is significant
+anova(Model1,Model1_inter2)
+#interaction is significant and we might want to remove one of these variables
+
+#stepwise for all other interactions
+NullModel <- lm(bwt.oz~smoke+mrace,data=smoking)
+FullModel <- lm(bwt.oz~smoke*mrace + smoke*med + smoke*inc + 
+                  med*inc + parity + mage + mht + mpregwt,
+                data=smoking)
+n <- nrow(smoking)
+Model_step <- step(NullModel, scope = formula(FullModel),direction="both",trace=0, k = log(n))
+Model_step$call
+#lm(formula = bwt.oz ~ smoke + mrace + mpregwt + mht, data = smoking)
+
+#making the final model
+final_model <- lm(bwt.oz~smoke + mrace + mpregwt + mht, data = smoking)
+summary(final_model)
+
+#let's check model assumptions of the final model
+#Normality
+plot(final_model,which=2,col=c("blue4"))
+#normality is being reasonably satisfied aligned with what we saw during EDA
+
+#variance and independence
+plot(final_model,which=1,col=c("blue4"))
+#both assumptions are being reasonably satisfied
+
+#cooks distance, leverage, standardized residuals
+plot(final_model,which=5,col=c("blue4"))
+#few outliers - how do we extract outliers from this graph?
+
+#confidence intervals
+confint(final_model,level = 0.95)
+
+#centering the vars to interpret the intercept
+summ(final_model, center = TRUE)
+
+#plot for interaction between income and education
+ggplot(smoking,aes(x=med, y=bwt.oz, fill=med)) +
+  geom_boxplot() + #coord_flip() +
+  scale_fill_brewer(palette="Set1") +
+  labs(title="Weight vs Mother's Educ by Income",x="Mother's Educ",y="Weight") + 
+  theme_classic() + theme(legend.position="none") +
+  facet_wrap( ~ inc,ncol=4)
+
+#image 1 (histogram of mrace)
+counts <- table(smoking$smoke, smoking$mrace)
+barplot(counts, main="Distribution of Mothers' Race by Smoking Status",
+        xlab="Race", col=c("lightblue","yellow"),
+        legend = rownames(counts))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
